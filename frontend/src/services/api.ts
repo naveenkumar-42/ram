@@ -15,3 +15,8 @@ export const getHistory = async (productId: string) => {
     const response = await api.get(`/products/${productId}/history`);
     return response.data;
 };
+
+export const updateProduct = async (id: string, updates: any) => {
+    const response = await api.patch(`/products/${id}`, updates);
+    return response.data;
+};

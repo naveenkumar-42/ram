@@ -24,15 +24,13 @@ class PricingEngine:
         # in the last 24 hours (assuming daily scraps).
         # Even better: The logic should likely trust the LATEST scrape.
         
-        # Quick implementation: Get most recent price per competitor
-        # SELECT price FROM competitor_prices WHERE product_id=... GROUP BY competitor_id ORDER BY captured_at DESC
-        # SQLAlchemy complexity might be high for this snippets, let's use a simpler heuristic:
-        # Get the lowest price seen in the last 48 hours.
+        # Filter: Only consider prices captured in the last 48 hours to avoid stale data
         from datetime import timedelta
         cutoff = datetime.utcnow() - timedelta(hours=48)
         
         min_price = self.db.query(CompetitorPrice.price)\
             .filter(CompetitorPrice.product_id == product_id)\
+            .filter(CompetitorPrice.captured_at >= cutoff)\
             .order_by(CompetitorPrice.price.asc())\
             .first()
             

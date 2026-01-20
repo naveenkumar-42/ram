@@ -1,21 +1,29 @@
 import { useEffect, useState } from 'react';
 import { DashboardLayout } from '../components/DashboardLayout';
-import { getProducts, getHistory } from '../services/api';
+import { getProducts, getHistory, updateProduct } from '../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowDown, ArrowUp, DollarSign } from 'lucide-react';
+import { DollarSign } from 'lucide-react';
+import { ProductTable } from '../components/ProductTable';
+import type { Product } from '../types';
 
 export const Dashboard = () => {
-    const [products, setProducts] = useState<any[]>([]);
-    const [selectedProduct, setSelectedProduct] = useState<any>(null);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [history, setHistory] = useState<any[]>([]);
 
     useEffect(() => {
         fetchProducts();
+        // Poll product list every 5 seconds to catch new additions or global changes
+        const prodInterval = setInterval(fetchProducts, 5000);
+        return () => clearInterval(prodInterval);
     }, []);
 
     useEffect(() => {
         if (selectedProduct) {
             fetchHistory(selectedProduct.id);
+            // Poll history every 2 seconds for live chart updates
+            const histInterval = setInterval(() => fetchHistory(selectedProduct.id), 2000);
+            return () => clearInterval(histInterval);
         }
     }, [selectedProduct]);
 
@@ -23,7 +31,8 @@ export const Dashboard = () => {
         try {
             const data = await getProducts();
             setProducts(data);
-            if (data.length > 0) setSelectedProduct(data[0]);
+            // Select first product by default if none selected
+            if (data.length > 0 && !selectedProduct) setSelectedProduct(data[0]);
         } catch (error) {
             console.error("Failed to fetch products", error);
         }
@@ -32,10 +41,20 @@ export const Dashboard = () => {
     const fetchHistory = async (id: string) => {
         try {
             const data = await getHistory(id);
-            // Reverse for chart (oldest to newest)
             setHistory([...data].reverse());
         } catch (e) {
             console.error(e);
+        }
+    };
+
+    const handleUpdateProduct = async (id: string, updates: Partial<Product>) => {
+        try {
+            await updateProduct(id, updates);
+            await fetchProducts(); // Refresh
+            alert("Product updated successfully!");
+        } catch (e) {
+            console.error("Update failed", e);
+            alert("Failed to update product.");
         }
     }
 
@@ -59,74 +78,48 @@ export const Dashboard = () => {
                         </div>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500">Price Updates (24h)</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-1">12</h3>
-                        </div>
-                        <div className="p-2 bg-green-50 text-green-600 rounded-lg">
-                            <ArrowUp size={20} />
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500">Margin Alerts</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-1">0</h3>
-                        </div>
-                        <div className="p-2 bg-red-50 text-red-600 rounded-lg">
-                            <ArrowDown size={20} />
-                        </div>
-                    </div>
-                </div>
+                {/* ... other stats ... */}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Product List */}
-                <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="p-5 border-b border-gray-100">
-                        <h3 className="font-semibold text-gray-800">Monitored Products</h3>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                        {products.map(p => (
-                            <div
-                                key={p.id}
-                                onClick={() => setSelectedProduct(p)}
-                                className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${selectedProduct?.id === p.id ? 'bg-blue-50' : ''}`}
-                            >
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="font-medium text-gray-900">{p.name}</span>
-                                    <span className="text-sm font-bold text-primary">${p.current_price}</span>
-                                </div>
-                                <div className="flex justify-between text-xs text-gray-500">
-                                    <span>SKU: {p.sku}</span>
-                                    <span>Min: ${(p.base_cost * (1 + p.min_margin_percent)).toFixed(2)}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+            <div className="space-y-8">
+
+                {/* Product Table (Admin Config) */}
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Product Configuration</h3>
+                    <ProductTable products={products} onUpdate={handleUpdateProduct} />
                 </div>
 
-                {/* Charts */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <div className="mb-6">
-                        <h3 className="font-semibold text-gray-800">Price History: {selectedProduct?.name}</h3>
+                {/* Charts Area */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div className="mb-6 flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-800">Price History: {selectedProduct?.name || 'Select a Product'}</h3>
+                        <div className="flex space-x-2">
+                            {products.map(p => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => setSelectedProduct(p)}
+                                    className={`px-3 py-1 text-sm rounded-full ${selectedProduct?.id === p.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                >
+                                    {p.sku}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                     <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={history}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="created_at" tickFormatter={(t) => new Date(t).toLocaleTimeString()} stroke="#94a3b8" fontSize={12} />
-                                <YAxis stroke="#94a3b8" fontSize={12} domain={['auto', 'auto']} />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                />
-                                <Line type="monotone" dataKey="new_price" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: '#2563eb' }} activeDot={{ r: 6 }} />
-                                <Line type="step" dataKey="old_price" stroke="#94a3b8" strokeDasharray="5 5" strokeWidth={2} dot={false} />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        {selectedProduct ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={history}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="created_at" tickFormatter={(t) => new Date(t).toLocaleTimeString()} stroke="#94a3b8" fontSize={12} />
+                                    <YAxis stroke="#94a3b8" fontSize={12} domain={['auto', 'auto']} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                                    <Line type="stepAfter" dataKey="new_price" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} name="System Price" />
+                                    <Line type="stepAfter" dataKey="old_price" stroke="#94a3b8" strokeDasharray="5 5" strokeWidth={1} dot={false} name="Old Price" />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-gray-400">Select a product to view history</div>
+                        )}
                     </div>
                 </div>
             </div>
